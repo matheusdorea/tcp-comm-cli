@@ -18,8 +18,10 @@ lock = threading.Lock()
 conexoes_ativas = {}
 rodando = True
 
-def broadcast():
-    pass
+def broadcast(sender, msg):
+    with lock:
+        for conn in conexoes_ativas.keys():
+            conn.send(msg.encode())
 
 def handle_cliente(conn: socket.socket, addr):
     
@@ -62,9 +64,9 @@ def admin():
     global rodando
     while rodando:
 
-        msg = input()
+        command = input()
         
-        if msg == "/desligar":
+        if command == "/desligar":
             rodando = False
             print("Fechando conexões e saindo...")
             
@@ -75,11 +77,15 @@ def admin():
             servidor.close()
             break
             
-        if msg == "/online":
+        if command == "/online":
             with lock: 
                 lista = ", ".join(conexoes_ativas.values())
                 print(lista)
         
+        if command == "/all":
+            msg = input("Admin: ")
+            broadcast(servidor, msg)
+
 thread_connect = threading.Thread(target=aceitar_conexoes)
 thread_admin = threading.Thread(target=admin)
 
