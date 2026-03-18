@@ -41,9 +41,6 @@ def receber_mensagens():
     while rodando:
         print(cliente.recv(BUFFERSIZE).decode())
 
-
-iniciar_cliente()
-
 thread_enviar = threading.Thread(target=enviar_mensagens)
 thread_receber = threading.Thread(target=receber_mensagens)
 
