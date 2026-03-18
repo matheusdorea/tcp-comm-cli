@@ -18,32 +18,35 @@ lock = threading.Lock()
 conexoes_ativas = {}
 rodando = True
 
-def broadcast():
-    pass
+def broadcast(msg, remetente = None):
+    with lock:
+        for conn in conexoes_ativas.keys():
+            if conn != remetente:
+                conn.send(msg.encode())
 
 def handle_cliente(conn: socket.socket, addr):
-    
-    conn.send("Digite o seu nome de usuário".encode())
-    user = conn.recv(BUFFERSIZE).decode()
-    
-    with lock:
-        conexoes_ativas[conn] = user
-    
-    conn.send(f"Seje bevido {conexoes_ativas[conn]}".encode())
+    try:
+        conn.send("Digite o seu nome de usuário".encode())
+        user = conn.recv(BUFFERSIZE).decode()
         
-    while rodando:
-        msg = conn.recv(BUFFERSIZE)
+        with lock:
+            conexoes_ativas[conn] = user
+        
+        conn.send(f"Seje bevido {conexoes_ativas[conn]}".encode())
+            
+        while rodando:
+            msg = conn.recv(BUFFERSIZE)
 
-        if not msg:
-            print(f"Cliente {addr} desconectou")
-            break
+            if not msg:
+                print(f"Cliente {addr} desconectou")
+                break
 
-        print(f"Mensagem recebida de {addr}: {msg.decode()}")
-        conn.send(msg.upper())
+            broadcast(f"{conexoes_ativas[conn]}: {msg.decode()}", conn)
 
-    with lock:
-        conexoes_ativas.remove(conn)
-    conn.close()
+    except(ConnectionResetError):
+        pass
+    finally:
+        remover_conexao(conn)
 
 def aceitar_conexoes():
     while rodando:
@@ -57,28 +60,41 @@ def aceitar_conexoes():
             thread_cliente.start()
         except OSError:
             break
+        
+def remover_conexao(conn):
+    if conn in conexoes_ativas:
+        user = conexoes_ativas[conn]
+        with lock:
+            del conexoes_ativas[conn]
+        print(f"[SERVIDOR] {user} se desconectou...")
+        conn.close()
 
 def admin():
     global rodando
     while rodando:
 
-        msg = input()
-        
-        if msg == "/desligar":
-            rodando = False
-            print("Fechando conexões e saindo...")
-            
-            for conn in conexoes_ativas.keys():
-                print(f"Desconectando {conexoes_ativas[conn]}...")
-                conn.close()
+        comando = input()
+        try:
+            if comando == "/desligar":
+                rodando = False
+                print("Fechando conexões e saindo...")
                 
-            servidor.close()
-            break
+                for conn in conexoes_ativas.keys():
+                    conn.close()
+                    
+                servidor.close()
+                break
+        except(ConnectionAbortedError):
+            pass
             
-        if msg == "/online":
+        if comando == "/online":
             with lock: 
                 lista = ", ".join(conexoes_ativas.values())
                 print(lista)
+                
+        if comando == "/all":
+            msg = input("Mensagem: ")
+            broadcast(msg)
         
 thread_connect = threading.Thread(target=aceitar_conexoes)
 thread_admin = threading.Thread(target=admin)
