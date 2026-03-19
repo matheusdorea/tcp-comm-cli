@@ -86,6 +86,8 @@ def main(stdscr = curses.initscr()):
             break
         
         cliente.send(msg.encode())
+        painel_msgs.addstr(f"Você ({apelido}): {msg}\n")
+        painel_msgs.refresh()
         
     cliente.close()
                 
