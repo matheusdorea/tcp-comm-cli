@@ -112,7 +112,7 @@ def main(stdscr = curses.initscr()):
             try:
                 comando = painel_input.getstr().decode()
             except:
-                pass
+                continue
             curses.noecho()
             
             if comando == "/desligar":
@@ -120,19 +120,25 @@ def main(stdscr = curses.initscr()):
                 log("Fechando conexões e saindo...")
                 
                 for conn in conexoes_ativas.keys():
-                    conn.close()
+                    try:
+                        conn.close()
+                    except (ConnectionAbortedError):
+                        log(f"Conexão abortada com {conexoes_ativas[conn]}")
                     
                 servidor.close()
                 break
                 
             if comando == "/online":
                 with lock: 
-                    lista = ", ".join(conexoes_ativas.values())
-                    log(lista)
+                    lista = "\n".join(conexoes_ativas.values())
+                log(lista)
                     
-            if comando == "/all":
-                msg = input("Mensagem: ")
-                broadcast(msg)
+            if comando.startswith("/all "):
+                msg = comando[5:]
+                broadcast(f"[Servidor]: {msg}")
+
+            painel_logs.addstr(f"Admin: {comando}\n")
+            painel_logs.refresh()
             
         except(ConnectionAbortedError):
             pass

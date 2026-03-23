@@ -77,7 +77,7 @@ def main(stdscr = curses.initscr()):
         try:
             msg = painel_input.getstr().decode()
         except:
-            pass
+            continue
         curses.noecho()
         
         if msg == "/sair":
