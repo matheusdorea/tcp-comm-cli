@@ -18,6 +18,8 @@ servidor.listen(5)
 lock = threading.Lock()
 conexoes_ativas = {}
 rodando = True
+em_conversa = set()
+conversas = {}
 
 painel_logs = None
 
@@ -44,16 +46,29 @@ def handle_cliente(conn: socket.socket, addr):
         conn.send(f"Seje bevido {conexoes_ativas[conn]}".encode())
             
         while rodando:
-            msg = conn.recv(BUFFERSIZE)
+            msg = conn.recv(BUFFERSIZE).decode()
 
             if not msg:
                 log(f"Cliente {addr} desconectou")
                 break
 
-            broadcast(f"{conexoes_ativas[conn]}: {msg.decode()}", conn)
+            if msg == "/online":
+                with lock: 
+                    lista = "\n".join(conexoes_ativas.values())
+                conn.send(f"Lista de usuários online: \n{lista}".encode())
+                continue
 
-    except(ConnectionResetError):
-        pass
+            if msg.startswith("/connect "):
+                nome = msg[9:]
+                destino = next(k for k, v in conexoes_ativas.items() if v == nome)
+                conversas[conn] = destino
+                em_conversa.add(conn)
+                continue
+
+            broadcast(f"{conexoes_ativas[conn]}: {msg}", conn)
+
+    except Exception as e:
+        log(f"Erro com {addr}: {type(e).__name__}: {e}")
     finally:
         remover_conexao(conn)
 

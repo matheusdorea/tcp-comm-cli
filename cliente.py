@@ -80,7 +80,7 @@ def main(stdscr = curses.initscr()):
             continue
         curses.noecho()
         
-        if msg == "/sair":
+        if msg == "/logout":
             with lock:
                 rodando = False
             break
