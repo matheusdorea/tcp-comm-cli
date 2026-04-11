@@ -3,20 +3,16 @@ import threading
 import curses
 
 
-servidor = socket.socket(
-socket.AF_INET,
-socket.SOCK_STREAM
-)
+servidor = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
 HOST = 'localhost'
 PORT = 12345
 BUFFERSIZE = 1024
 
 servidor.bind((HOST, PORT))
-servidor.listen(5)
 
 lock = threading.Lock()
-conexoes_ativas = {}
+clientes = {}
 rodando = True
 
 painel_logs = None
@@ -29,54 +25,34 @@ def log(msg):
 
 def broadcast(msg, remetente = None):
     with lock:
-        for conn in conexoes_ativas.keys():
-            if conn != remetente:
-                conn.send(msg.encode())
-
-def handle_cliente(conn: socket.socket, addr):
-    try:
-        conn.send("Digite o seu nome de usuário".encode())
-        user = conn.recv(BUFFERSIZE).decode()
-        
-        with lock:
-            conexoes_ativas[conn] = user
-        
-        conn.send(f"Seje bevido {conexoes_ativas[conn]}".encode())
-            
-        while rodando:
-            msg = conn.recv(BUFFERSIZE)
-
-            if not msg:
-                log(f"Cliente {addr} desconectou")
-                break
-
-            broadcast(f"{conexoes_ativas[conn]}: {msg.decode()}", conn)
-
-    except(ConnectionResetError):
-        pass
-    finally:
-        remover_conexao(conn)
+        for addr in clientes:
+            if addr != remetente:
+                servidor.sendto(msg.encode(), addr)
 
 def aceitar_conexoes():
     while rodando:
         try:
-            log("Servidor Aguardando")
-            conn, addr = servidor.accept()
-
-            log(f"Conectado por: {addr}")
-            thread_cliente = threading.Thread(target=handle_cliente, args=[conn, addr])
-            thread_cliente.daemon = True
-            thread_cliente.start()
+            data, addr = servidor.recvfrom(BUFFERSIZE)
+            msg = data.decode()
+            
+            if addr not in clientes:
+                # Primeiro pacote = apelido
+                clientes[addr] = msg
+                log(f"[+] {msg} conectou ({addr})")
+                servidor.sendto(f"Bem-vindo, {msg}!".encode(), addr)
+                broadcast(f"[Servidor] {msg} entrou no chat.", addr)
+            else:
+                apelido = clientes[addr]
+                if msg == "/sair":
+                    broadcast(f"[Servidor] {apelido} saiu.", addr)
+                    log(f"[-] {apelido} desconectou ({addr})")
+                    with lock:
+                        del clientes[addr]
+                else:
+                    log(f"{apelido}: {msg}")
+                    broadcast(f"{apelido}: {msg}", addr)
         except OSError:
             break
-        
-def remover_conexao(conn):
-    if conn in conexoes_ativas:
-        user = conexoes_ativas[conn]
-        with lock:
-            del conexoes_ativas[conn]
-        log(f"[SERVIDOR] {user} se desconectou...")
-        conn.close()
             
 def main(stdscr = curses.initscr()):
     global rodando, painel_logs
@@ -88,7 +64,7 @@ def main(stdscr = curses.initscr()):
     
     painel_logs = curses.newwin(altura - 2, largura, 0, 0)
     painel_logs.scrollok(True)
-    painel_logs.addstr("=== Servidor iniciado ===\n")
+    painel_logs.addstr("=== Servidor UDP iniciado ===\n")
     painel_logs.addstr("Comandos: /online | /all <msg> | /desligar\n\n")
     painel_logs.refresh()
 
@@ -118,32 +94,24 @@ def main(stdscr = curses.initscr()):
             if comando == "/desligar":
                 rodando = False
                 log("Fechando conexões e saindo...")
-                
-                for conn in conexoes_ativas.keys():
-                    try:
-                        conn.close()
-                    except (ConnectionAbortedError):
-                        log(f"Conexão abortada com {conexoes_ativas[conn]}")
-                    
+                for addr in list(clientes):
+                    servidor.sendto(b"/desligar", addr)
                 servidor.close()
                 break
                 
-            if comando == "/online":
+            elif comando == "/online":
                 with lock: 
-                    lista = "\n".join(conexoes_ativas.values())
+                    lista = "\n".join(clientes.values())
                 log(lista)
                     
-            if comando.startswith("/all "):
+            elif comando.startswith("/all "):
                 msg = comando[5:]
                 broadcast(f"[Servidor]: {msg}")
 
             painel_logs.addstr(f"Admin: {comando}\n")
             painel_logs.refresh()
-            
         except(ConnectionAbortedError):
             pass
-            
-    
 
 curses.wrapper(main)
 

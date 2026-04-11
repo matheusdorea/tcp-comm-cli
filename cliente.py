@@ -2,27 +2,22 @@ import socket
 import threading
 import curses
 
-# 1. Cria socket TCP
-cliente = socket.socket(
-socket.AF_INET,
-socket.SOCK_STREAM
-)
+# 1. Cria socket UDP
+cliente = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
 HOST = 'localhost'
 PORT = 12345
 BUFFERSIZE = 1024
+ADDR = (HOST, PORT)
+
 rodando = True
 lock = threading.Lock()
-
-# 2. Conecta ao servidor
-cliente.connect((HOST, PORT))
 
 def main(stdscr = curses.initscr()):
     global rodando
     
     curses.curs_set(1)
     stdscr.clear()
-    
     altura, largura = stdscr.getmaxyx()
     
     painel_msgs = curses.newwin(altura - 2, largura, 0, 0)
@@ -38,10 +33,6 @@ def main(stdscr = curses.initscr()):
         with lock:
             painel_msgs.addstr(f"{msg}\n")
             painel_msgs.refresh()
-
-            
-    prompt = cliente.recv(BUFFERSIZE).decode()
-    adicionar_mensagem(prompt)
     
     #iniciando cliente
     painel_input.clear()
@@ -50,18 +41,21 @@ def main(stdscr = curses.initscr()):
     curses.echo()
     apelido = painel_input.getstr().decode()
     curses.noecho()
-    cliente.send(apelido.encode())
+    cliente.sendto(apelido.encode(), ADDR)
     
-    boas_vindas = cliente.recv(BUFFERSIZE).decode()
-    adicionar_mensagem(boas_vindas)
+    boas_vindas, _ = cliente.recvfrom(BUFFERSIZE)
+    adicionar_mensagem(boas_vindas.decode())
     
     def receber_mensagens():
         global rodando
         while rodando:
             try:
-                msg = cliente.recv(BUFFERSIZE).decode()
-                if msg:
-                    adicionar_mensagem(msg)
+                msg, _ = cliente.recvfrom(BUFFERSIZE)
+                if msg == b"/desligar":
+                    adicionar_mensagem("[Servidor encerrado]")
+                    rodando = False
+                    break
+                adicionar_mensagem(msg.decode())
             except:
                 break
             
@@ -81,13 +75,13 @@ def main(stdscr = curses.initscr()):
         curses.noecho()
         
         if msg == "/sair":
+            cliente.sendto(b"/sair", ADDR)
             with lock:
                 rodando = False
             break
         
-        cliente.send(msg.encode())
-        painel_msgs.addstr(f"Você ({apelido}): {msg}\n")
-        painel_msgs.refresh()
+        cliente.sendto(msg.encode(), ADDR)
+        adicionar_mensagem(f"Você ({apelido}): {msg}")
         
     cliente.close()
                 
